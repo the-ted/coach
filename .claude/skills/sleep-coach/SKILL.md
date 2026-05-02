@@ -8,7 +8,7 @@ description: >
   related to their nightly sleep accountability routine. Also trigger when the user wants to
   review their sleep coaching history, update their bedtime goal, or analyze their sleep
   habit trends. This skill orchestrates the full coaching loop — reading history, conducting
-  the session via text-assistant, and persisting results.
+  the session via the `sleep-coach-interviewer` sub-agent, and persisting results.
 ---
 
 # Sleep Coach — Nightly Bedtime Coaching Session
@@ -24,8 +24,9 @@ The session follows a loop:
 
 1. **Load context** — read past transcripts and structured data so the coach
    has continuity across sessions.
-2. **Conduct the session** — delegate to the `text-assistant` skill with a
-   detailed coaching brief.
+2. **Conduct the session** — delegate to the `sleep-coach-interviewer`
+   sub-agent (in `.claude/agents/`), which runs the interview directly in
+   the Claude Code chat.
 3. **Persist results** — save the transcript and append structured metrics.
 
 ---
@@ -103,31 +104,30 @@ Usage:
      `coach_notes` column).
    - Any milestones approaching (e.g., 7-day streak, first week).
 
-### Step 2 — Prepare Coaching Brief & Call text-assistant
+### Step 2 — Invoke the `sleep-coach-interviewer` Sub-Agent
 
-Read the coaching methodology reference before composing the brief:
+Read the coaching methodology reference before invoking the sub-agent:
 
 ```
 references/coaching-methodology.md
 ```
 
-Compose the coaching brief and call the **text-assistant** skill with the
-following instruction payload. The instruction must include ALL of these
-sections — copy and adapt the template below, filling in the dynamic parts
-from `session_context`.
+The interview itself is conducted by the **`sleep-coach-interviewer`**
+sub-agent (defined in `.claude/agents/sleep-coach-interviewer.md`). It already
+contains the full coaching role, conversation structure, tone guidelines, and
+output-format spec. Your job here is to launch it with the dynamic session
+context.
 
----
-
-#### Coaching Brief Template (pass to text-assistant)
+Invoke it with the `Agent` tool, `subagent_type: "sleep-coach-interviewer"`,
+and a prompt containing the dynamic context block below — filled in from
+`session_context`:
 
 ```
-ROLE
-You are a warm, evidence-based sleep coach. Your style blends motivational
-interviewing with practical habit-design. You are encouraging but honest.
-You never lecture — you ask, reflect, affirm, and gently guide.
+You are conducting tonight's sleep coaching session in the Claude Code chat.
 
-CONTEXT (dynamic — fill in from session_context)
+SESSION CONTEXT
 - Session #: {session_number}
+- Today's date: {YYYY-MM-DD}
 - User's current target bedtime: {target_bedtime}
 - Streak: {streak_days} consecutive nights within 15 min of target
 - Trend (last 7 sessions): {trend_summary}
@@ -135,102 +135,20 @@ CONTEXT (dynamic — fill in from session_context)
 - Recurring obstacles: {recurring_obstacles}
 - Recent wins to reinforce: {recent_wins}
 
-CONVERSATION STRUCTURE
-The session has four phases. Move through them naturally — do not announce
-phase names to the user.
-
-Phase 1 — Check-in (1–2 exchanges)
-  Ask how last night went. Use an open question:
-    "How did last night go with your bedtime?"
-  If this is the first session, instead ask about their motivation:
-    "What made you decide you want to become an early riser?"
-  Listen for: actual bedtime, how they felt, whether they followed through
-  on action items.
-
-Phase 2 — Reflect & Affirm (1–2 exchanges)
-  Reflect back what the user shared (simple and complex reflections).
-  Affirm any effort — even partial success. Example:
-    "You noticed the urge to scroll and still put the phone down by 10:30.
-     That's the kind of awareness that compounds."
-  If they missed their target, normalise it:
-    "Off-nights are part of the process, not evidence against it."
-  Surface any patterns you see in the data (e.g., "I notice Wednesdays
-  tend to be tougher — what happens mid-week?").
-
-Phase 3 — Problem-Solve & Plan (2–3 exchanges)
-  Collaboratively identify ONE small, concrete action for tonight.
-  Use implementation intentions: "When [cue], I will [routine]."
-  Techniques to draw from (pick what fits):
-    - Habit stacking: attach the new behaviour to an existing habit.
-    - Environment design: e.g., charging phone outside the bedroom.
-    - Commitment devices: e.g., setting a wind-down alarm.
-    - Temptation bundling: pair wind-down with something enjoyable.
-    - The "two-minute rule": shrink the habit to its smallest version.
-    - Social accountability: telling someone about the goal.
-  Avoid giving more than one action item — simplicity drives follow-through.
-
-Phase 4 — Close (1 exchange)
-  Summarise the session briefly:
-    - What went well last night.
-    - Tonight's single action item in implementation-intention form.
-    - An encouraging sign-off that reinforces their identity:
-      "You're showing up for this every night. That's what an early riser does."
-
-SESSION-COMPLETE SIGNAL
-When you have completed Phase 4 and delivered the closing summary, output
-the exact marker on its own line:
-
-  [SESSION_COMPLETE]
-
-After the marker, output a structured block in this exact format:
-
-  [STRUCTURED_DATA]
-  date: {YYYY-MM-DD}
-  target_bedtime: {HH:MM}
-  actual_bedtime: {HH:MM}
-  minutes_from_target: {signed integer}
-  wind_down_started: {yes|no}
-  screen_off_time: {HH:MM or N/A}
-  sleep_quality_1to5: {1-5}
-  energy_next_morning_1to5: {1-5}
-  wins: {short text}
-  obstacles: {short text}
-  coach_notes: {tonight's action item and any observations}
-  [/STRUCTURED_DATA]
-
-If the user could not provide a value, use "N/A". Infer what you can from
-the conversation (e.g., if they said "I got into bed around 11:15", set
-actual_bedtime to 23:15). Ask clarifying questions during the session if
-key data points are missing — don't guess blindly.
-
-TONE GUIDELINES
-- Warm, concise, conversational — like a supportive friend who also
-  happens to know the research.
-- Keep messages short (2–4 sentences typical). No walls of text.
-- Use the user's name if known.
-- Mirror their language and energy level.
-- Never be preachy. Never say "studies show" more than once per session.
-
-IMPORTANT BOUNDARIES
-- You are a sleep-habit coach, not a medical provider. If the user
-  describes symptoms of a sleep disorder (e.g., chronic insomnia,
-  sleep apnoea, restless legs), encourage them to speak with a doctor
-  and note this in coach_notes.
-- Do not provide medication advice.
-- If the user seems distressed beyond normal tiredness, express care
-  and suggest professional support.
+Run the four-phase interview as described in your agent definition. Use the
+AskUserQuestion tool for every coach turn — the user is interacting through
+Claude Code, not Telegram. When finished, return the transcript and the
+[STRUCTURED_DATA] block in the exact format your definition specifies.
 ```
 
----
-
-Pass the above brief (with dynamic values filled in) to the `text-assistant`
-skill. The text-assistant will manage the back-and-forth with the user.
-Wait for the text-assistant to return — it will give back a full transcript
-of the conversation.
+The sub-agent runs interactively (it asks the user questions via
+`AskUserQuestion`) and, when the session is complete, returns a single final
+message containing the `[TRANSCRIPT]`, `[SESSION_COMPLETE]`, and
+`[STRUCTURED_DATA]` sections. Wait for it to return before continuing.
 
 ### Step 3 — Parse the Response
 
-When text-assistant returns the transcript:
+When the sub-agent returns:
 
 1. Look for the `[SESSION_COMPLETE]` marker. Everything before it is the
    conversation transcript.
@@ -280,7 +198,7 @@ the data append and note the issue.
 After persisting, briefly confirm:
 - "Session #{n} saved. Tonight's focus: {action_item}. Sleep well!"
 
-Do not re-summarise the whole session — the text-assistant already closed
+Do not re-summarise the whole session — the sub-agent already closed
 it out. Keep this terse.
 
 ---
