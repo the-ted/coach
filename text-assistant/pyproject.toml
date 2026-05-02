@@ -1,0 +1,14 @@
+[project]
+name = "text-assistant"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "python-telegram-bot>=21.0,<22.0",
+    "litellm>=1.60,<2.0",
+]
+
+[tool.setuptools]
+packages = ["text_assistant"]
+
+[project.scripts]
+text-assistant = "text_assistant.cli:main"
