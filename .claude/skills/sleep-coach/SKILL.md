@@ -25,8 +25,8 @@ The session follows a loop:
 1. **Load context** — read past transcripts and structured data so the coach
    has continuity across sessions.
 2. **Conduct the session** — delegate to the `sleep-coach-interviewer`
-   sub-agent (in `.claude/agents/`), which runs the interview directly in
-   the Claude Code chat.
+   sub-agent (in `.claude/agents/`), which runs the interview over
+   Telegram via the `text_assistant.ask` utility.
 3. **Persist results** — save the transcript and append structured metrics.
 
 ---
@@ -123,7 +123,7 @@ and a prompt containing the dynamic context block below — filled in from
 `session_context`:
 
 ```
-You are conducting tonight's sleep coaching session in the Claude Code chat.
+You are conducting tonight's sleep coaching session over Telegram.
 
 SESSION CONTEXT
 - Session #: {session_number}
@@ -135,16 +135,18 @@ SESSION CONTEXT
 - Recurring obstacles: {recurring_obstacles}
 - Recent wins to reinforce: {recent_wins}
 
-Run the four-phase interview as described in your agent definition. Use the
-AskUserQuestion tool for every coach turn — the user is interacting through
-Claude Code, not Telegram. When finished, return the transcript and the
+Run the four-phase interview as described in your agent definition. Send
+each coach turn via the `text_assistant.ask` Bash command — you generate
+the question, the script delivers it on Telegram and returns the user's
+reply on stdout. When finished, return the transcript and the
 [STRUCTURED_DATA] block in the exact format your definition specifies.
 ```
 
-The sub-agent runs interactively (it asks the user questions via
-`AskUserQuestion`) and, when the session is complete, returns a single final
-message containing the `[TRANSCRIPT]`, `[SESSION_COMPLETE]`, and
-`[STRUCTURED_DATA]` sections. Wait for it to return before continuing.
+The sub-agent runs interactively (it sends each question over Telegram via
+the `text_assistant.ask` script and reads replies from stdout), and, when
+the session is complete, returns a single final message containing the
+`[TRANSCRIPT]`, `[SESSION_COMPLETE]`, and `[STRUCTURED_DATA]` sections.
+Wait for it to return before continuing.
 
 ### Step 3 — Parse the Response
 
